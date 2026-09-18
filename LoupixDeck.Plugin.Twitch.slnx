@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LoupixDeck.Plugin.Twitch/LoupixDeck.Plugin.Twitch.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LoupixDeck.Plugin.Twitch.Tests/LoupixDeck.Plugin.Twitch.Tests.csproj" />
+  </Folder>
+</Solution>

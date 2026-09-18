@@ -1,0 +1,14 @@
+bin/
+obj/
+dist/
+local-feed/
+TestResults/
+.vs/
+*.user
+*.suo
+
+# Local plugin settings / tokens must never be committed
+settings.json
+store.json
+*.token
+tokens*.json

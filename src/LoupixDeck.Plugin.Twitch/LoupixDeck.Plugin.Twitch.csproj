@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>default</LangVersion>
+    <DebugType>embedded</DebugType>
+
+    <!-- Produces a .deps.json and copies dependencies next to the plugin dll so
+         the host's AssemblyDependencyResolver can find them. -->
+    <EnableDynamicLoading>true</EnableDynamicLoading>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+
+    <Version>1.0.1</Version>
+    <Authors>vividflash</Authors>
+    <Description>Twitch chat, clip and viewer-count commands for LoupixDeck.</Description>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The host supplies the SDK assembly at runtime; never ship it. -->
+    <PackageReference Include="LoupixDeck.PluginSdk" Version="1.23.0">
+      <ExcludeAssets>runtime</ExcludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.9" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="LoupixDeck.Plugin.Twitch.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Update="plugin.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>
