@@ -1,10 +1,10 @@
 {
   "id": "twitch",
   "name": "Twitch",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "sdkVersion": "1.23.0",
   "entryAssembly": "LoupixDeck.Plugin.Twitch.dll",
   "platform": "Windows",
   "author": "vividflash",
-  "description": "Send chat messages, create clips, clear chat, toggle slow and emote-only mode, and show the live viewer count."
+  "description": "Send chat messages, create clips, run ads, set stream markers, clear chat, toggle slow and emote-only mode, and show the live viewer count."
 }

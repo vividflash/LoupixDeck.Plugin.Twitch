@@ -9,6 +9,9 @@ namespace LoupixDeck.Plugin.Twitch.Twitch;
 /// <summary>Chat settings fields the toggles care about.</summary>
 public sealed record ChatSettings(bool SlowMode, int? SlowModeWaitTime, bool EmoteMode);
 
+/// <summary>Result of a started ad break: the length Twitch used and the cooldown until the next one.</summary>
+public sealed record CommercialResult(int Length, int RetryAfterSeconds, string Message);
+
 /// <summary>
 /// Minimal Twitch Helix client acting as the signed-in broadcaster. Every call
 /// goes through <see cref="SendAsync"/>: an expired token is refreshed first,
@@ -19,18 +22,32 @@ public sealed class HelixClient
 {
     public const string BaseUrl = "https://api.twitch.tv/helix/";
     public const int MaxChatMessageLength = 500;
-    public const int MinSlowWait = 3;
-    public const int MaxSlowWait = 120;
+    public const int MaxMarkerDescription = 140;
+    public const string CommercialScope = "channel:edit:commercial";
+    public const string MarkerScope = "channel:manage:broadcast";
 
     private readonly HttpClient _http;
     private readonly TokenStore _store;
     private readonly TwitchAuth _auth;
+    private readonly Func<DateTime> _utcNow;
 
-    public HelixClient(HttpClient http, TokenStore store, TwitchAuth auth)
+    // Twitch only reports the ad cooldown in the response of the ad that started it,
+    // so remember it to make a later "cooldown" error say how long is left.
+    private DateTime? _adCooldownUntilUtc;
+
+    /// <summary>
+    /// UTC time the ad cooldown started by this client's own last successful ad ends, or null
+    /// when unknown (no ad started yet this session). Used by the Run Ad button badge to show a
+    /// real countdown instead of just "Cooldown" when a later attempt is refused.
+    /// </summary>
+    public DateTime? AdCooldownUntilUtc => _adCooldownUntilUtc;
+
+    public HelixClient(HttpClient http, TokenStore store, TwitchAuth auth, Func<DateTime>? utcNow = null)
     {
         _http = http;
         _store = store;
         _auth = auth;
+        _utcNow = utcNow ?? (() => DateTime.UtcNow);
     }
 
     // ---------------- endpoints ----------------
@@ -92,7 +109,7 @@ public sealed class HelixClient
         }
         catch (TwitchApiException ex) when (ex.StatusCode == 404)
         {
-            throw new TwitchApiException(404, "Cannot clip: the channel is offline.");
+            throw new TwitchApiException(404, "Cannot clip: the channel is offline.", "Offline");
         }
 
         using var doc = JsonDocument.Parse(body);
@@ -108,6 +125,92 @@ public sealed class HelixClient
         var body = await SendAsync(() => new HttpRequestMessage(HttpMethod.Get,
             $"{BaseUrl}streams?user_id={Uri.EscapeDataString(id)}"), ct).ConfigureAwait(false);
         return ParseViewerCount(body);
+    }
+
+    /// <summary>
+    /// Starts an ad break of <paramref name="lengthSeconds"/>, snapped to Twitch's ad lengths (30 to 180 s).
+    /// Twitch refuses when the channel is not live or the previous ad's cooldown runs.
+    /// </summary>
+    public async Task<CommercialResult> RunCommercialAsync(int lengthSeconds, CancellationToken ct = default)
+    {
+        EnsureScope(CommercialScope, "Run Ad");
+        var id = await GetUserIdAsync(ct).ConfigureAwait(false);
+        var payload = new JsonObject
+        {
+            ["broadcaster_id"] = id,
+            ["length"] = TwitchSteps.SnapAdLength(lengthSeconds)
+        };
+
+        string body;
+        try
+        {
+            body = await SendAsync(() => JsonRequest(HttpMethod.Post, BaseUrl + "channels/commercial", payload), ct)
+                .ConfigureAwait(false);
+        }
+        catch (TwitchApiException ex) when (ex.StatusCode is 400 or 429)
+        {
+            throw CommercialError(ex);
+        }
+
+        var result = ParseCommercial(body);
+        if (result.Length <= 0 && result.Message.Length > 0)
+            throw new TwitchApiException(200, $"Twitch did not start the ad: {result.Message}");
+
+        if (result.RetryAfterSeconds > 0)
+            _adCooldownUntilUtc = _utcNow().AddSeconds(result.RetryAfterSeconds);
+        return result;
+    }
+
+    private TwitchApiException CommercialError(TwitchApiException ex)
+    {
+        var text = ex.Message;
+        if (ex.StatusCode == 429 || text.Contains("cooldown", StringComparison.OrdinalIgnoreCase))
+        {
+            var left = _adCooldownUntilUtc is { } until ? (int)Math.Ceiling((until - _utcNow()).TotalSeconds) : 0;
+            var wait = left > 0 ? $" Try again in about {FormatDuration(left)}." : " Try again later.";
+            return new TwitchApiException(ex.StatusCode,
+                "Cannot run an ad yet: the cooldown after the last ad is still running." + wait, "Cooldown");
+        }
+
+        if (text.Contains("live", StringComparison.OrdinalIgnoreCase))
+            return new TwitchApiException(ex.StatusCode, "Cannot run an ad: the channel is not live.", "Offline");
+
+        return new TwitchApiException(ex.StatusCode, $"Cannot run an ad: {text}");
+    }
+
+    /// <summary>
+    /// Adds a stream marker at the current position. Twitch answers 404 when the
+    /// channel is not live (or VODs are disabled). Returns the marker id.
+    /// </summary>
+    public async Task<string> CreateStreamMarkerAsync(string? description = null, CancellationToken ct = default)
+    {
+        EnsureScope(MarkerScope, "Set Marker");
+        description = description?.Trim();
+        if (description is { Length: > MaxMarkerDescription })
+            throw new ArgumentException(
+                $"Marker description is {description.Length} characters, Twitch allows {MaxMarkerDescription}.");
+
+        var id = await GetUserIdAsync(ct).ConfigureAwait(false);
+        var payload = new JsonObject { ["user_id"] = id };
+        if (!string.IsNullOrEmpty(description)) payload["description"] = description;
+
+        string body;
+        try
+        {
+            body = await SendAsync(() => JsonRequest(HttpMethod.Post, BaseUrl + "streams/markers", payload), ct)
+                .ConfigureAwait(false);
+        }
+        catch (TwitchApiException ex) when (ex.StatusCode == 404)
+        {
+            throw new TwitchApiException(404,
+                $"Stream offline, no marker. Twitch also refuses markers when past broadcasts (VODs) are disabled. ({ex.Message})",
+                "Offline");
+        }
+
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(body) ? "{}" : body);
+        return FirstData(doc) is { } item && item.TryGetProperty("id", out var markerId)
+            ? markerId.GetString() ?? string.Empty
+            : string.Empty;
     }
 
     public async Task ClearChatAsync(CancellationToken ct = default)
@@ -159,14 +262,44 @@ public sealed class HelixClient
         return new JsonObject
         {
             ["slow_mode"] = true,
-            ["slow_mode_wait_time"] = ClampSlowWait(defaultWaitSeconds)
+            ["slow_mode_wait_time"] = TwitchSteps.SnapSlowModeWait(defaultWaitSeconds)
         };
     }
 
     internal static JsonObject BuildEmoteModePatch(ChatSettings current) =>
         new() { ["emote_mode"] = !current.EmoteMode };
 
-    internal static int ClampSlowWait(long seconds) => (int)Math.Clamp(seconds, MinSlowWait, MaxSlowWait);
+    internal static string FormatDuration(int seconds) =>
+        seconds >= 60 ? $"{seconds / 60} min {seconds % 60} s" : $"{seconds} s";
+
+    internal static CommercialResult ParseCommercial(string json)
+    {
+        using var doc = JsonDocument.Parse(json);
+        var item = FirstData(doc) ?? throw new InvalidOperationException("Twitch returned no ad status.");
+        var length = item.TryGetProperty("length", out var l) && l.TryGetInt32(out var n) ? n : 0;
+        var retry = item.TryGetProperty("retry_after", out var r) && r.TryGetInt32(out var m) ? m : 0;
+        var message = item.TryGetProperty("message", out var msg) ? msg.GetString() ?? string.Empty : string.Empty;
+        return new CommercialResult(length, retry, message);
+    }
+
+    /// <summary>
+    /// The token's granted scopes are known from sign-in. A sign-in from an older
+    /// plugin version lacks the scopes of newer commands; say so before calling Twitch.
+    /// An empty scope list (unknown) lets the call through; Twitch's own 401 is handled in SendAsync.
+    /// </summary>
+    private void EnsureScope(string scope, string commandLabel)
+    {
+        var token = _store.Load() ?? throw NotSignedIn();
+        if (token.Scopes.Length > 0 && !token.Scopes.Contains(scope, StringComparer.Ordinal))
+            throw MissingScope(
+                $"'{commandLabel}' needs the Twitch permission {scope}, which your current sign-in does not have.");
+    }
+
+    internal static TwitchAuthRequiredException MissingScope(string detail) =>
+        new($"{detail} Open Plugins > Twitch and click 'Sign in again' to grant it.");
+
+    internal static bool IsMissingScope(string twitchMessage) =>
+        twitchMessage.Contains("scope", StringComparison.OrdinalIgnoreCase);
 
     internal static string BroadcasterAndModerator(string id)
     {
@@ -261,6 +394,12 @@ public sealed class HelixClient
 
             if (resp.StatusCode == HttpStatusCode.Unauthorized)
             {
+                // A missing scope is not an expired token: refreshing keeps the same
+                // scopes, and clearing the token would sign out every other command too.
+                var reason = ErrorMessage(body);
+                if (IsMissingScope(reason))
+                    throw MissingScope($"Twitch refused the call: {reason}.");
+
                 if (attempt == 0)
                 {
                     token = await _auth.RefreshAsync(token.AccessToken, ct).ConfigureAwait(false);

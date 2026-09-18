@@ -138,9 +138,9 @@ public class HelixClientTests
         var rig = new Rig();
         rig.Handler
             .Respond(HttpStatusCode.OK, """{"data":[{"broadcaster_id":"12345","slow_mode":false,"slow_mode_wait_time":null,"emote_mode":false}]}""")
-            .Respond(HttpStatusCode.OK, """{"data":[{"slow_mode":true,"slow_mode_wait_time":45}]}""");
+            .Respond(HttpStatusCode.OK, """{"data":[{"slow_mode":true,"slow_mode_wait_time":60}]}""");
 
-        var on = await rig.Helix.ToggleSlowModeAsync(45);
+        var on = await rig.Helix.ToggleSlowModeAsync(60);
 
         Assert.True(on);
         Assert.Equal(2, rig.Handler.Requests.Count);
@@ -150,7 +150,7 @@ public class HelixClientTests
         Assert.Equal(HttpMethod.Patch, patch.Method);
         Assert.Equal("https://api.twitch.tv/helix/chat/settings?broadcaster_id=12345&moderator_id=12345", patch.Url.ToString());
         Assert.True(Json(patch.Body).GetProperty("slow_mode").GetBoolean());
-        Assert.Equal(45, Json(patch.Body).GetProperty("slow_mode_wait_time").GetInt32());
+        Assert.Equal(60, Json(patch.Body).GetProperty("slow_mode_wait_time").GetInt32());
     }
 
     [Fact]
@@ -168,14 +168,19 @@ public class HelixClientTests
     }
 
     [Theory]
-    [InlineData(30, 30)]
-    [InlineData(1, 3)]
+    [InlineData(30, 30)]    // exact
+    [InlineData(1, 3)]      // below min
     [InlineData(0, 3)]
-    [InlineData(500, 120)]
+    [InlineData(500, 120)]  // above max
     [InlineData(120, 120)]
-    public void Slow_wait_is_clamped_to_twitch_range(long input, int expected)
+    [InlineData(7, 5)]      // between 5 and 10, closer to 5
+    [InlineData(8, 10)]     // between 5 and 10, closer to 10
+    [InlineData(45, 30)]    // tie between 30 and 60: lower
+    [InlineData(90, 60)]    // tie between 60 and 120: lower
+    [InlineData(91, 120)]
+    public void Slow_wait_snaps_to_twitch_steps(long input, int expected)
     {
-        Assert.Equal(expected, HelixClient.ClampSlowWait(input));
+        Assert.Equal(expected, TwitchSteps.SnapSlowModeWait(input));
         var patch = HelixClient.BuildSlowModePatch(new ChatSettings(false, null, false), (int)Math.Min(input, int.MaxValue));
         Assert.Equal(expected, patch["slow_mode_wait_time"]!.GetValue<int>());
     }

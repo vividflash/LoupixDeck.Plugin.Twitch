@@ -181,11 +181,14 @@ public class CommandTests
             new ViewerCountCommand(new ViewerCountCache(_ => Task.FromResult<int?>(0), () => { }, rig.Logger), rig.Logger),
             new ClearChatCommand(rig.Helix, rig.Logger),
             new ToggleSlowChatCommand(rig.Helix, rig.Logger, () => 30),
-            new ToggleEmotesOnlyCommand(rig.Helix, rig.Logger)
+            new ToggleEmotesOnlyCommand(rig.Helix, rig.Logger),
+            new RunCommercialCommand(rig.Helix, rig.Logger, () => 30),
+            new CreateStreamMarkerCommand(rig.Helix, rig.Logger)
         }.Select(c => c.Descriptor.CommandName).ToArray();
 
         Assert.Equal(
-            ["Twitch.SendChatMessage", "Twitch.CreateClip", "Twitch.ViewerCount", "Twitch.ClearChat", "Twitch.ToggleSlowChat", "Twitch.ToggleEmotesOnly"],
+            ["Twitch.SendChatMessage", "Twitch.CreateClip", "Twitch.ViewerCount", "Twitch.ClearChat", "Twitch.ToggleSlowChat", "Twitch.ToggleEmotesOnly",
+             "Twitch.RunCommercial", "Twitch.CreateStreamMarker"],
             names);
     }
 
@@ -199,7 +202,7 @@ public class CommandTests
     }
 
     [Fact]
-    public async Task Execute_never_throws_and_logs_failures()
+    public async Task Execute_never_throws_and_does_not_log()
     {
         var rig = new Rig(signedIn: false);
         var host = new FakeHost();
@@ -207,7 +210,7 @@ public class CommandTests
 
         await cmd.Execute(Ctx(host, ButtonTargets.TouchButton));
 
-        Assert.Contains(rig.Logger.Lines, l => l.StartsWith("W Twitch.ClearChat"));
+        Assert.Empty(rig.Logger.Lines); // the badge is the feedback; the command does not also log
         Assert.Empty(host.Overlays); // touch presses carry no slot index
     }
 

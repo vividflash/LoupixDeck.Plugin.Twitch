@@ -12,8 +12,12 @@ Twitch plugin for [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck). Windo
 | `Twitch.ClearChat` | Clears your chat |
 | `Twitch.ToggleSlowChat` | Turns slow mode on or off |
 | `Twitch.ToggleEmotesOnly` | Turns emote-only mode on or off |
+| `Twitch.RunCommercial` | Runs an ad (only while live, Partners/Affiliates) |
+| `Twitch.CreateStreamMarker` | Sets a stream marker (only while live, VODs enabled) |
 
 A chat message cannot contain `)`. Commas are kept: `Twitch.SendChatMessage(hi,all)` sends `hi, all`.
+
+On a touch button each command shows its result for 10 seconds at the bottom of the button: `Sent`, `Clipped`, `Cleared`, `Slow ON`/`Slow OFF`, `Emotes ON`/`Emotes OFF`, `Marked`, `Offline`, `Sign in` or `Failed`. Run Ad counts down the ad seconds, or shows `Cooldown` when pressed too early.
 
 ## Setup
 
@@ -24,7 +28,10 @@ A chat message cannot contain `)`. Commas are kept: `Twitch.SendChatMessage(hi,a
 Settings:
 
 - **Redirect port**: default `3000`. If you change it, change the redirect URL of your Twitch application too.
-- **Slow mode wait**: 3 to 120 seconds, default 30.
+- **Slow mode wait**: 3, 5, 10, 20, 30, 60 or 120 seconds, default 30.
+- **Ad length**: 30, 60, 90, 120, 150 or 180 seconds, default 30.
+
+Other numbers are rounded to the nearest allowed value.
 
 ## Storage
 

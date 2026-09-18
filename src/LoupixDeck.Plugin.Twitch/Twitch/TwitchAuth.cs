@@ -26,8 +26,13 @@ public sealed class TwitchAuth
         "user:write:chat",
         "clips:edit",
         "moderator:manage:chat_messages",
-        "moderator:manage:chat_settings"
+        "moderator:manage:chat_settings",
+        HelixClient.CommercialScope,
+        HelixClient.MarkerScope
     ];
+
+    /// <summary>Twitch client ids and client secrets are 30 characters of a-z and 0-9.</summary>
+    public const int CredentialLength = 30;
 
     internal static readonly TimeSpan SignInTimeout = TimeSpan.FromMinutes(3);
 
@@ -46,6 +51,39 @@ public sealed class TwitchAuth
     }
 
     public static string RedirectUri(int port) => $"http://localhost:{port}";
+
+    /// <summary>
+    /// Removes whitespace a paste often carries (spaces, tabs, line breaks, also
+    /// inside the value) and surrounding quotes.
+    /// </summary>
+    public static string CleanCredential(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return string.Empty;
+        var noSpace = new string(value.Where(c => !char.IsWhiteSpace(c)).ToArray());
+        return noSpace.Trim('"', '\'');
+    }
+
+    /// <summary>
+    /// Sanity check of the entered app credentials. Returns a user-facing problem
+    /// description, or null when both look like real Twitch values.
+    /// </summary>
+    public static string? ValidateCredentials(AppCredentials creds)
+    {
+        var id = CleanCredential(creds.ClientId);
+        var secret = CleanCredential(creds.ClientSecret);
+        if (id.Length == 0) return "Client ID is empty.";
+        if (secret.Length == 0) return "Client Secret is empty.";
+        return CheckOne("Client ID", id) ?? CheckOne("Client Secret", secret);
+
+        static string? CheckOne(string label, string value)
+        {
+            var ok = value.Length == CredentialLength && value.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9');
+            if (ok) return null;
+            return $"{label} does not look like a Twitch value: it has {value.Length} characters, Twitch uses " +
+                   $"{CredentialLength} lowercase letters and digits. Copy it again from dev.twitch.tv/console/apps " +
+                   "(only the value itself, nothing around it).";
+        }
+    }
 
     public static string BuildAuthorizeUrl(string clientId, string redirectUri, string state)
     {
@@ -80,9 +118,9 @@ public sealed class TwitchAuth
     /// </summary>
     public async Task<string> SignInAsync(int port, Func<string, bool> openBrowser, CancellationToken ct = default)
     {
-        var creds = _credentials();
-        if (string.IsNullOrWhiteSpace(creds.ClientId)) throw new InvalidOperationException("Client ID is empty.");
-        if (string.IsNullOrWhiteSpace(creds.ClientSecret)) throw new InvalidOperationException("Client Secret is empty.");
+        var raw = _credentials();
+        if (ValidateCredentials(raw) is { } problem) throw new InvalidOperationException(problem);
+        var creds = new AppCredentials(CleanCredential(raw.ClientId), CleanCredential(raw.ClientSecret));
         if (port is <= 0 or > 65535) throw new InvalidOperationException($"Redirect port {port} is not a valid port.");
 
         var redirectUri = RedirectUri(port);

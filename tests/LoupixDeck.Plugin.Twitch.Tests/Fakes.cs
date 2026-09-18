@@ -102,11 +102,123 @@ public sealed class FakeHost : IPluginHost
     public bool SetActiveButtonState(string commandName, string stateNameOrId) => false;
 }
 
+/// <summary>
+/// Minimal <see cref="IRenderCanvas"/> stand-in for testing display commands: captures what was
+/// drawn (rounded-rectangle band + text) without needing a real rendering backend. Width/Height
+/// default to the device's 90x90 touch button size. MeasureText is a simple deterministic stand-in
+/// (proportional to font size and text length) — good enough to exercise the caller's fit/shrink
+/// logic without matching any real font's metrics.
+/// </summary>
+public sealed class FakeCanvas(int width = 90, int height = 90) : IRenderCanvas
+{
+    public int Width { get; } = width;
+    public int Height { get; } = height;
+    public List<string> DrawnTexts { get; } = [];
+    public bool BandDrawn { get; private set; }
+
+    public void Clear(PluginColor color)
+    {
+    }
+
+    public void FillRectangle(int x, int y, int width, int height, PluginColor color)
+    {
+    }
+
+    public void DrawRectangle(int x, int y, int width, int height, int strokeWidth, PluginColor color)
+    {
+    }
+
+    public void FillRoundedRectangle(int x, int y, int width, int height, int radius, PluginColor color) =>
+        BandDrawn = true;
+
+    public void DrawRoundedRectangle(int x, int y, int width, int height, int radius, int strokeWidth, PluginColor color)
+    {
+    }
+
+    public void FillCircle(int centerX, int centerY, int radius, PluginColor color)
+    {
+    }
+
+    public void DrawCircle(int centerX, int centerY, int radius, int strokeWidth, PluginColor color)
+    {
+    }
+
+    public void FillEllipse(int x, int y, int width, int height, PluginColor color)
+    {
+    }
+
+    public void DrawEllipse(int x, int y, int width, int height, int strokeWidth, PluginColor color)
+    {
+    }
+
+    public void DrawArc(int x, int y, int width, int height, float startAngle, float sweepAngle, int strokeWidth, PluginColor color)
+    {
+    }
+
+    public void FillArc(int x, int y, int width, int height, float startAngle, float sweepAngle, PluginColor color)
+    {
+    }
+
+    public void DrawLine(int x1, int y1, int x2, int y2, int strokeWidth, PluginColor color)
+    {
+    }
+
+    public void DrawText(string text, int x, int y, int width, int height, PluginColor color,
+        float fontSize, bool bold = false, bool italic = false,
+        bool centered = true, bool outlined = false, PluginColor outlineColor = default) =>
+        DrawnTexts.Add(text);
+
+    public void DrawText(string text, int x, int y, int width, int height, PluginColor color,
+        float fontSize, TextHAlign hAlign, TextVAlign vAlign,
+        bool bold = false, bool italic = false, bool outlined = false, PluginColor outlineColor = default) =>
+        DrawnTexts.Add(text);
+
+    public float MeasureText(string text, float fontSize, bool bold = false, bool italic = false) =>
+        text.Length * fontSize * 0.6f;
+
+    public void DrawSymbol(string symbolId, int x, int y, int width, int height, PluginColor tint)
+    {
+    }
+
+    public void DrawSymbol(string symbolId, int x, int y, int width, int height, SymbolStyle style)
+    {
+    }
+
+    public void DrawImage(byte[] imageBytes, int x, int y, int width, int height)
+    {
+    }
+
+    public void DrawImage(byte[] imageBytes, int x, int y, int width, int height, byte opacity, PluginColor tint = default)
+    {
+    }
+
+    public void PushTransform()
+    {
+    }
+
+    public void PopTransform()
+    {
+    }
+
+    public void Translate(float dx, float dy)
+    {
+    }
+
+    public void Rotate(float degrees)
+    {
+    }
+
+    public void Scale(float sx, float sy)
+    {
+    }
+}
+
 /// <summary>Wires store + auth + helix around a fake handler, optionally pre-signed-in.</summary>
 public sealed class Rig
 {
-    public const string ClientId = "test-client-id";
-    public const string ClientSecret = "test-client-secret";
+    // Same shape as real Twitch values (30 x [a-z0-9]) so the sign-in sanity check accepts them.
+    public const string ClientId = "testclientid0123456789abcdefgh";
+    public const string ClientSecret = "testclientsecret0123456789abcd";
     public const string UserId = "12345";
 
     public FakeHandler Handler { get; } = new();
@@ -115,13 +227,14 @@ public sealed class Rig
     public TokenStore Store { get; }
     public TwitchAuth Auth { get; }
     public HelixClient Helix { get; }
+    public DateTime Now { get; set; } = new(2026, 1, 1, 12, 0, 0, DateTimeKind.Utc);
 
-    public Rig(bool signedIn = true, bool withUserId = true, DateTime? expiresAtUtc = null)
+    public Rig(bool signedIn = true, bool withUserId = true, DateTime? expiresAtUtc = null, string[]? scopes = null)
     {
         var http = new HttpClient(Handler);
         Store = new TokenStore(Settings, new FakeProtector(), Logger);
         Auth = new TwitchAuth(http, Store, () => new AppCredentials(ClientId, ClientSecret), Logger);
-        Helix = new HelixClient(http, Store, Auth);
+        Helix = new HelixClient(http, Store, Auth, () => Now);
 
         if (signedIn)
         {
@@ -132,7 +245,8 @@ public sealed class Rig
                 ExpiresAtUtc = expiresAtUtc ?? DateTime.UtcNow.AddHours(2),
                 ClientId = ClientId,
                 UserId = withUserId ? UserId : string.Empty,
-                Login = withUserId ? "yourchannel" : string.Empty
+                Login = withUserId ? "yourchannel" : string.Empty,
+                Scopes = scopes ?? []
             });
         }
     }

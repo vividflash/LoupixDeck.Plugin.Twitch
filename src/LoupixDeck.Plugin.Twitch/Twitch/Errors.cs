@@ -5,9 +5,13 @@ public sealed class TwitchApiException : Exception
 {
     public int StatusCode { get; }
 
-    public TwitchApiException(int statusCode, string message) : base(message)
+    /// <summary>Optional short text for dial feedback (e.g. "Offline"); null means "Failed".</summary>
+    public string? Feedback { get; }
+
+    public TwitchApiException(int statusCode, string message, string? feedback = null) : base(message)
     {
         StatusCode = statusCode;
+        Feedback = feedback;
     }
 }
 

@@ -17,8 +17,10 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     internal const string SettingClientSecret = "client_secret";
     internal const string SettingRedirectPort = "redirect_port";
     internal const string SettingSlowWait = "slow_mode_wait_seconds";
+    internal const string SettingAdLength = "ad_length_seconds";
     internal const int DefaultRedirectPort = 3000;
-    internal const int DefaultSlowWait = 30;
+    internal const int DefaultSlowWait = TwitchSteps.DefaultSlowModeWait;
+    internal const int DefaultAdLength = TwitchSteps.DefaultAdLength;
 
     private IPluginHost _host = null!;
     private HttpClient _http = null!;
@@ -32,17 +34,17 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     {
         Id = "twitch",
         Name = "Twitch",
-        Version = new Version(1, 0, 0),
+        Version = new Version(1, 1, 0),
         SdkVersion = new Version(1, 23, 0),
         Author = "vividflash",
-        Description = "Send chat messages, create clips, clear chat, toggle slow and emote-only mode, and show the live viewer count."
+        Description = "Send chat messages, create clips, run ads, set stream markers, clear chat, toggle slow and emote-only mode, and show the live viewer count."
     };
 
     public override void Initialize(IPluginHost host)
     {
         _host = host;
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("LoupixDeck.Plugin.Twitch/1.0");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd("LoupixDeck.Plugin.Twitch/1.1");
 
         _tokens = new TokenStore(host.Settings, new DpapiTokenProtector(), host.Logger);
         _auth = new TwitchAuth(_http, _tokens, ReadCredentials, host.Logger);
@@ -59,7 +61,9 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
             new ViewerCountCommand(_viewers, host.Logger),
             new ClearChatCommand(_helix, host.Logger),
             new ToggleSlowChatCommand(_helix, host.Logger, ReadSlowWait),
-            new ToggleEmotesOnlyCommand(_helix, host.Logger)
+            new ToggleEmotesOnlyCommand(_helix, host.Logger),
+            new RunCommercialCommand(_helix, host.Logger, ReadAdLength),
+            new CreateStreamMarkerCommand(_helix, host.Logger)
         ];
     }
 
@@ -70,7 +74,7 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         new CommandGroupDescriptor
         {
             Group = TwitchCommandBase.GroupName,
-            Description = "Chat, clips and viewer count",
+            Description = "Chat, clips, ads, markers and viewer count",
             Section = CommandGroupSection.Plugins
         }
     ];
@@ -83,8 +87,8 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     // ---------------- settings ----------------
 
     private AppCredentials ReadCredentials() => new(
-        (_host.Settings.Get<string>(SettingClientId) ?? string.Empty).Trim(),
-        (_host.Settings.Get<string>(SettingClientSecret) ?? string.Empty).Trim());
+        TwitchAuth.CleanCredential(_host.Settings.Get<string>(SettingClientId)),
+        TwitchAuth.CleanCredential(_host.Settings.Get<string>(SettingClientSecret)));
 
     private int ReadPort()
     {
@@ -93,7 +97,31 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     }
 
     private int ReadSlowWait() =>
-        HelixClient.ClampSlowWait(_host.Settings.Get<long>(SettingSlowWait, DefaultSlowWait));
+        TwitchSteps.SnapSlowModeWait(_host.Settings.Get<long>(SettingSlowWait, DefaultSlowWait));
+
+    private int ReadAdLength() =>
+        TwitchSteps.SnapAdLength(_host.Settings.Get<long>(SettingAdLength, DefaultAdLength));
+
+    /// <summary>
+    /// Stores pasted credentials without stray whitespace/quotes, so the saved
+    /// value is the one that gets used. Returns true when something changed.
+    /// </summary>
+    internal static bool NormalizeCredentials(IPluginSettings settings)
+    {
+        var changed = false;
+        foreach (var key in new[] { SettingClientId, SettingClientSecret })
+        {
+            var raw = settings.Get<string>(key);
+            if (raw == null) continue;
+            var clean = TwitchAuth.CleanCredential(raw);
+            if (clean == raw) continue;
+            settings.Set(key, clean);
+            changed = true;
+        }
+
+        if (changed) settings.Save();
+        return changed;
+    }
 
     public IReadOnlyList<PluginSettingDescriptor> SettingsSchema
     {
@@ -101,6 +129,12 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         {
             var redirect = _host == null ? TwitchAuth.RedirectUri(DefaultRedirectPort) : TwitchAuth.RedirectUri(ReadPort());
             var signedInAs = _tokens?.Load() is { } t ? (t.Login.Length > 0 ? t.Login : "your account") : null;
+            var creds = _host == null ? new AppCredentials("", "") : ReadCredentials();
+            var credsEntered = creds.ClientId.Length > 0 || creds.ClientSecret.Length > 0;
+            var credsProblem = credsEntered ? TwitchAuth.ValidateCredentials(creds) : null;
+            var missingScopes = _tokens?.Load() is { Scopes.Length: > 0 } granted
+                ? TwitchAuth.RequiredScopes.Where(s => !granted.Scopes.Contains(s)).ToArray()
+                : [];
 
             return
             [
@@ -147,21 +181,49 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
                     Key = SettingSlowWait,
                     Label = "Slow mode wait (seconds)",
                     Kind = PluginSettingKind.Number,
-                    Description = "Used when 'Toggle slow chat' turns slow mode on (3 to 120).",
+                    Description = "Used when 'Toggle slow chat' turns slow mode on. Twitch offers " +
+                                  $"{TwitchSteps.Describe(TwitchSteps.SlowModeWaitSeconds)} seconds; other values " +
+                                  $"snap to the nearest of these (default {DefaultSlowWait}).",
                     DefaultValue = (long)DefaultSlowWait
+                },
+                new PluginSettingDescriptor
+                {
+                    Key = "__heading_ads",
+                    Label = "Ads",
+                    Kind = PluginSettingKind.Heading,
+                    DefaultValue = string.Empty
+                },
+                new PluginSettingDescriptor
+                {
+                    Key = SettingAdLength,
+                    Label = "Ad length (seconds)",
+                    Kind = PluginSettingKind.Number,
+                    Description = $"Used by 'Run Ad'. Twitch offers {TwitchSteps.Describe(TwitchSteps.AdLengthSeconds)} " +
+                                  $"seconds; other values snap to the nearest of these (default {DefaultAdLength}).",
+                    DefaultValue = (long)DefaultAdLength
                 },
                 new PluginSettingDescriptor
                 {
                     Key = "__heading_account",
                     Label = "Account",
                     Kind = PluginSettingKind.Heading,
-                    Description = signedInAs != null
-                        ? $"Signed in as {signedInAs}. The token is stored encrypted for your Windows user."
-                        : "Not signed in. Fill in Client ID and Client Secret, then click 'Sign in with Twitch'.",
+                    Description = AccountStatus(signedInAs, credsProblem, missingScopes),
                     DefaultValue = string.Empty
                 }
             ];
         }
+    }
+
+    internal static string AccountStatus(string? signedInAs, string? credsProblem, IReadOnlyCollection<string> missingScopes)
+    {
+        var text = signedInAs != null
+            ? $"Signed in as {signedInAs}. The token is stored encrypted for your Windows user."
+            : "Not signed in. Fill in Client ID and Client Secret, then click 'Sign in with Twitch'.";
+        if (signedInAs != null && missingScopes.Count > 0)
+            text += $" This sign-in is missing permissions for newer commands ({string.Join(", ", missingScopes)}): click 'Sign in again'.";
+        if (credsProblem != null)
+            text += " Problem: " + credsProblem;
+        return text;
     }
 
     public IReadOnlyList<PluginSettingAction> SettingsActions =>
@@ -171,6 +233,8 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
 
     public void OnSettingsSaved()
     {
+        if (_host != null && NormalizeCredentials(_host.Settings))
+            _host.Logger.Info("Twitch: removed spaces/quotes from the pasted Client ID or Client Secret.");
         _viewers?.Invalidate();
     }
 

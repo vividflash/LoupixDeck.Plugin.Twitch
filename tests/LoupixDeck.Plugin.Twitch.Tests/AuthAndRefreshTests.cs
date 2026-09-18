@@ -136,7 +136,7 @@ public class AuthAndRefreshTests
         Assert.Contains("client_id=abc", url);
         Assert.Contains("redirect_uri=http%3A%2F%2Flocalhost%3A3000", url);
         Assert.Contains("state=STATE1", url);
-        Assert.Contains("scope=user%3Awrite%3Achat%20clips%3Aedit%20moderator%3Amanage%3Achat_messages%20moderator%3Amanage%3Achat_settings", url);
+        Assert.Contains("scope=user%3Awrite%3Achat%20clips%3Aedit%20moderator%3Amanage%3Achat_messages%20moderator%3Amanage%3Achat_settings%20channel%3Aedit%3Acommercial%20channel%3Amanage%3Abroadcast", url);
     }
 
     [Fact]
