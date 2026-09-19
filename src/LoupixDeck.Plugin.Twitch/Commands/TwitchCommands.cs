@@ -29,11 +29,11 @@ internal abstract class TwitchCommandBase : IDisplayImageCommand
 
     // Bottom band the badge is drawn into, within the 90x90 touch canvas.
     private const int BadgeHeight = 26;
-    private const int BadgeMargin = 3;
+    internal const int BadgeMargin = 3;
     private const int BadgeRadius = 8;
-    private const int BadgeTextPadding = 8;
-    private const float MaxFontSize = 12f;
-    private const float MinFontSize = 7f;
+    internal const int BadgeTextPadding = 8;
+    internal const float MaxFontSize = 12f;
+    internal const float MinFontSize = 7f;
     private static readonly PluginColor BandColor = new(0, 0, 0, 170);
 
     protected readonly HelixClient Helix;
@@ -108,7 +108,7 @@ internal abstract class TwitchCommandBase : IDisplayImageCommand
         {
             if (ctx.Target != ButtonTargets.RotaryEncoder || ctx.SourceIndex is not { } rotary) return;
             var slot = ctx.Host.GetTouchSlotForRotary(rotary);
-            if (slot >= 0) ctx.Host.OverlayTouchText(slot, text, FeedbackDuration);
+            if (slot >= 0) ctx.Host.OverlayTouchText(slot, Localization.Tr(text), FeedbackDuration);
         }
         catch
         {
@@ -128,8 +128,11 @@ internal abstract class TwitchCommandBase : IDisplayImageCommand
 
     /// <summary>Shows <paramref name="text"/> as a touch-button badge for <paramref name="duration"/>
     /// (10 s by default), then clears.</summary>
-    protected void SetBadge(CommandContext ctx, string text, TimeSpan? duration = null) =>
-        SetBadge(ctx, UtcNow() + (duration ?? DefaultBadgeDuration), _ => text);
+    protected void SetBadge(CommandContext ctx, string text, TimeSpan? duration = null)
+    {
+        var translated = Localization.Tr(text);
+        SetBadge(ctx, UtcNow() + (duration ?? DefaultBadgeDuration), _ => translated);
+    }
 
     /// <summary>Shows a touch-button badge until <paramref name="endUtc"/>, recomputing its text
     /// from the remaining time on every poll (e.g. a countdown). <paramref name="textFor"/> is
@@ -211,7 +214,7 @@ internal abstract class TwitchCommandBase : IDisplayImageCommand
             bold: true, centered: true);
     }
 
-    private static float FitFontSize(IRenderCanvas canvas, string text, float maxWidth)
+    internal static float FitFontSize(IRenderCanvas canvas, string text, float maxWidth)
     {
         var size = MaxFontSize;
         while (size > MinFontSize && canvas.MeasureText(text, size, bold: true) > maxWidth)
@@ -357,8 +360,9 @@ internal sealed class RunCommercialCommand(
     protected override async Task<string?> Run(CommandContext ctx)
     {
         var result = await Helix.RunCommercialAsync(adLengthSeconds()).ConfigureAwait(false);
+        // Bare number+s countdown: kept as-is, not routed through Tr (nothing to translate).
         SetBadge(ctx, UtcNow().AddSeconds(result.Length), remaining => $"{Seconds(remaining)}s");
-        return $"Ad {result.Length}s";
+        return string.Format(Localization.Tr("Ad {0}s"), result.Length);
     }
 
     // Run() already set the countdown badge; the shared default (static dial text) would replace it.
@@ -369,9 +373,13 @@ internal sealed class RunCommercialCommand(
     protected override void OnFailure(CommandContext ctx, string feedback, Exception ex)
     {
         // Known only when this client itself started the ad whose cooldown is running.
+        // feedback is compared in English (see the "Cooldown" token from HelixClient); the
+        // countdown text itself is translated separately, once, when it is actually drawn.
         if (feedback == "Cooldown" && Helix.AdCooldownUntilUtc is { } until && until > UtcNow())
         {
-            SetBadge(ctx, until, remaining => $"Cooldown {Seconds(remaining) / 60}:{Seconds(remaining) % 60:D2}");
+            var template = Localization.Tr("Cooldown {0}:{1}");
+            SetBadge(ctx, until, remaining =>
+                string.Format(template, Seconds(remaining) / 60, $"{Seconds(remaining) % 60:D2}"));
             return;
         }
 
@@ -422,11 +430,24 @@ internal sealed class ViewerCountCommand(ViewerCountCache cache, IPluginLogger l
 
     public string GetText(CommandContext ctx)
     {
-        try { return cache.GetText(); }
+        try
+        {
+            // The cache stores its state in English ("offline"/"sign in"/"error"/a formatted
+            // number); translate only here, at display time, so the cache's own comparisons
+            // (e.g. "did the text change") keep working across languages.
+            var text = cache.GetText();
+            return text switch
+            {
+                "offline" => Localization.Tr("offline"),
+                "sign in" => Localization.Tr("sign in"),
+                "error" => Localization.Tr("error"),
+                _ => text
+            };
+        }
         catch (Exception ex)
         {
             logger.Error("Twitch.ViewerCount: GetText failed", ex);
-            return "error";
+            return Localization.Tr("error");
         }
     }
 

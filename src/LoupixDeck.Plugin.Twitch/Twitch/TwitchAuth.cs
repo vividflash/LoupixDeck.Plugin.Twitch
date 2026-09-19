@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using LoupixDeck.PluginSdk;
+using LoupixDeck.Plugin.Twitch;
 
 namespace LoupixDeck.Plugin.Twitch.Twitch;
 
@@ -71,17 +72,19 @@ public sealed class TwitchAuth
     {
         var id = CleanCredential(creds.ClientId);
         var secret = CleanCredential(creds.ClientSecret);
-        if (id.Length == 0) return "Client ID is empty.";
-        if (secret.Length == 0) return "Client Secret is empty.";
+        if (id.Length == 0) return Localization.Tr("Client ID is empty.");
+        if (secret.Length == 0) return Localization.Tr("Client Secret is empty.");
         return CheckOne("Client ID", id) ?? CheckOne("Client Secret", secret);
 
         static string? CheckOne(string label, string value)
         {
             var ok = value.Length == CredentialLength && value.All(c => c is >= 'a' and <= 'z' or >= '0' and <= '9');
             if (ok) return null;
-            return $"{label} does not look like a Twitch value: it has {value.Length} characters, Twitch uses " +
-                   $"{CredentialLength} lowercase letters and digits. Copy it again from dev.twitch.tv/console/apps " +
-                   "(only the value itself, nothing around it).";
+            return string.Format(
+                Localization.Tr("{0} does not look like a Twitch value: it has {1} characters, Twitch uses {2} " +
+                                "lowercase letters and digits. Copy it again from dev.twitch.tv/console/apps " +
+                                "(only the value itself, nothing around it)."),
+                label, value.Length, CredentialLength);
         }
     }
 
@@ -121,7 +124,8 @@ public sealed class TwitchAuth
         var raw = _credentials();
         if (ValidateCredentials(raw) is { } problem) throw new InvalidOperationException(problem);
         var creds = new AppCredentials(CleanCredential(raw.ClientId), CleanCredential(raw.ClientSecret));
-        if (port is <= 0 or > 65535) throw new InvalidOperationException($"Redirect port {port} is not a valid port.");
+        if (port is <= 0 or > 65535)
+            throw new InvalidOperationException(string.Format(Localization.Tr("Redirect port {0} is not a valid port."), port));
 
         var redirectUri = RedirectUri(port);
 
@@ -191,7 +195,9 @@ public sealed class TwitchAuth
 
             var token = await ExchangeCodeAsync(creds, code, redirectUri, ct).ConfigureAwait(false);
             _store.Save(token);
-            return token.Login.Length > 0 ? $"Signed in as {token.Login}." : "Signed in.";
+            return token.Login.Length > 0
+                ? string.Format(Localization.Tr("Signed in as {0}."), token.Login)
+                : Localization.Tr("Signed in.");
         }
         finally
         {

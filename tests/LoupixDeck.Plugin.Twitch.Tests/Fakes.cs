@@ -2,6 +2,11 @@ using System.Net;
 using System.Text;
 using LoupixDeck.Plugin.Twitch.Twitch;
 using LoupixDeck.PluginSdk;
+using Xunit;
+
+// Localization holds its host in a static field (see Localization.cs); tests that set one
+// (LocalizationTests) must not run concurrently with tests that assume none is set.
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
 
 namespace LoupixDeck.Plugin.Twitch.Tests;
 
@@ -82,11 +87,18 @@ public sealed class FakeHost : IPluginHost
     public List<(int Slot, string Text)> Overlays { get; } = [];
     public List<string> Refreshes { get; } = [];
 
+    /// <summary>Null (the default) makes <see cref="Tr"/> a plain English pass-through, matching a
+    /// host with no translation for the current language. Set to exercise translation plumbing.</summary>
+    public Func<string, string>? Translate { get; set; }
+
     public IPluginLogger Logger => FakeLog;
     public IPluginSettings Settings => FakeSettings;
+    public string CurrentLanguage { get; set; } = "en";
     public FolderGridInfo FolderGrid => new(5, 3, 0);
     public DeviceInfo? ActiveDevice => null;
     public bool IsInExclusiveMode => false;
+
+    public string Tr(string english) => Translate?.Invoke(english) ?? english;
 
     public void RequestButtonRefresh(string commandName) => Refreshes.Add(commandName);
     public void ExecuteCommand(string command) { }

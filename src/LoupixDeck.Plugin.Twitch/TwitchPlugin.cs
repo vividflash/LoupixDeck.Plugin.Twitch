@@ -34,8 +34,8 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     {
         Id = "twitch",
         Name = "Twitch",
-        Version = new Version(1, 2, 1),
-        SdkVersion = new Version(1, 23, 0),
+        Version = new Version(1, 3, 0),
+        SdkVersion = new Version(1, 24, 0),
         Author = "vividflash",
         Description = "Send chat messages, create clips, run ads, set stream markers, clear chat, toggle slow and emote-only mode, and show the live viewer count."
     };
@@ -43,6 +43,7 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     public override void Initialize(IPluginHost host)
     {
         _host = host;
+        Localization.SetHost(host);
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
         _http.DefaultRequestHeaders.UserAgent.ParseAdd("LoupixDeck.Plugin.Twitch/1.1");
 
@@ -143,8 +144,9 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
                     Key = "__heading_app",
                     Label = "Twitch application",
                     Kind = PluginSettingKind.Heading,
-                    Description = "Register an application at dev.twitch.tv/console/apps (Client Type: Confidential). " +
-                                  $"Its OAuth Redirect URL must be exactly: {redirect}",
+                    Description = string.Format(
+                        Localization.Tr("Register an application at dev.twitch.tv/console/apps (Client Type: Confidential). " +
+                                        "Its OAuth Redirect URL must be exactly: {0}"), redirect),
                     DefaultValue = string.Empty
                 },
                 new PluginSettingDescriptor
@@ -166,7 +168,8 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
                     Key = SettingRedirectPort,
                     Label = "Redirect port",
                     Kind = PluginSettingKind.Number,
-                    Description = $"Local port used only during sign-in. Redirect URL: {redirect}",
+                    Description = string.Format(
+                        Localization.Tr("Local port used only during sign-in. Redirect URL: {0}"), redirect),
                     DefaultValue = (long)DefaultRedirectPort
                 },
                 new PluginSettingDescriptor
@@ -181,9 +184,10 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
                     Key = SettingSlowWait,
                     Label = "Slow mode wait (seconds)",
                     Kind = PluginSettingKind.Number,
-                    Description = "Used when 'Toggle slow chat' turns slow mode on. Twitch offers " +
-                                  $"{TwitchSteps.Describe(TwitchSteps.SlowModeWaitSeconds)} seconds; other values " +
-                                  $"snap to the nearest of these (default {DefaultSlowWait}).",
+                    Description = string.Format(
+                        Localization.Tr("Used when 'Toggle slow chat' turns slow mode on. Twitch offers {0} seconds; " +
+                                        "other values snap to the nearest of these (default {1})."),
+                        TwitchSteps.Describe(TwitchSteps.SlowModeWaitSeconds), DefaultSlowWait),
                     DefaultValue = (long)DefaultSlowWait
                 },
                 new PluginSettingDescriptor
@@ -198,8 +202,10 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
                     Key = SettingAdLength,
                     Label = "Ad length (seconds)",
                     Kind = PluginSettingKind.Number,
-                    Description = $"Used by 'Run Ad'. Twitch offers {TwitchSteps.Describe(TwitchSteps.AdLengthSeconds)} " +
-                                  $"seconds; other values snap to the nearest of these (default {DefaultAdLength}).",
+                    Description = string.Format(
+                        Localization.Tr("Used by 'Run Ad'. Twitch offers {0} seconds; other values snap to the nearest " +
+                                        "of these (default {1})."),
+                        TwitchSteps.Describe(TwitchSteps.AdLengthSeconds), DefaultAdLength),
                     DefaultValue = (long)DefaultAdLength
                 },
                 new PluginSettingDescriptor
@@ -217,12 +223,14 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     internal static string AccountStatus(string? signedInAs, string? credsProblem, IReadOnlyCollection<string> missingScopes)
     {
         var text = signedInAs != null
-            ? $"Signed in as {signedInAs}. The token is stored encrypted for your Windows user."
-            : "Not signed in. Fill in Client ID and Client Secret, then click 'Sign in with Twitch'.";
+            ? string.Format(Localization.Tr("Signed in as {0}. The token is stored encrypted for your Windows user."), signedInAs)
+            : Localization.Tr("Not signed in. Fill in Client ID and Client Secret, then click 'Sign in with Twitch'.");
         if (signedInAs != null && missingScopes.Count > 0)
-            text += $" This sign-in is missing permissions for newer commands ({string.Join(", ", missingScopes)}): click 'Sign in again'.";
+            text += string.Format(
+                Localization.Tr(" This sign-in is missing permissions for newer commands ({0}): click 'Sign in again'."),
+                string.Join(", ", missingScopes));
         if (credsProblem != null)
-            text += " Problem: " + credsProblem;
+            text += string.Format(Localization.Tr(" Problem: {0}"), credsProblem);
         return text;
     }
 
@@ -273,7 +281,7 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         {
             await _auth.SignOutAsync();
             _viewers.Invalidate();
-            return "Signed out, token deleted.";
+            return Localization.Tr("Signed out, token deleted.");
         }
     };
 }
