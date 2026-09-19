@@ -12,7 +12,7 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 
-    <Version>1.2.0</Version>
+    <Version>1.2.1</Version>
     <Authors>vividflash</Authors>
     <Description>Twitch chat, clip, ad, marker and viewer-count commands for LoupixDeck.</Description>
   </PropertyGroup>
