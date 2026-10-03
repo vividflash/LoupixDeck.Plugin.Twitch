@@ -8,9 +8,8 @@ namespace LoupixDeck.Plugin.Twitch.Tests;
 
 /// <summary>
 /// Localization.Tr (see Localization.cs) is the one place every runtime-composed descriptor and
-/// badge text goes through. These tests drive its fallback paths directly: no host set, a host
-/// whose SDK predates Tr (MissingMethodException), and a host that actually translates. Every
-/// test resets the static host afterward (Localization holds it in a static field) so it can't
+/// badge text goes through. These tests drive it directly: no host set, and a host that actually
+/// translates. Every test resets the static host afterward (Localization holds it in a static field) so it can't
 /// leak into other tests; Fakes.cs also disables cross-class parallelization for the assembly
 /// for the same reason.
 /// </summary>
@@ -23,21 +22,6 @@ public class LocalizationTests : IDisposable
     public void No_host_set_returns_english_unchanged()
     {
         Assert.Equal("Sign in", Localization.Tr("Sign in"));
-    }
-
-    [Fact]
-    public void Host_without_Tr_falls_back_to_english_and_is_not_retried()
-    {
-        var calls = 0;
-        var host = new FakeHost { Translate = _ => { calls++; throw new MissingMethodException(); } };
-        Localization.SetHost(host);
-
-        // First call hits the host and fails; later calls must skip straight to English instead
-        // of calling (and failing on) host.Tr again.
-        Assert.Equal("Sign in", Localization.Tr("Sign in"));
-        Assert.Equal("Failed", Localization.Tr("Failed"));
-
-        Assert.Equal(1, calls);
     }
 
     [Fact]

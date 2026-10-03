@@ -12,14 +12,14 @@
     <EnableDynamicLoading>true</EnableDynamicLoading>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
 
-    <Version>1.3.0</Version>
+    <Version>1.4.0</Version>
     <Authors>vividflash</Authors>
     <Description>Twitch chat, clip, ad, marker and viewer-count commands for LoupixDeck.</Description>
   </PropertyGroup>
 
   <ItemGroup>
     <!-- The host supplies the SDK assembly at runtime; never ship it. -->
-    <PackageReference Include="LoupixDeck.PluginSdk" Version="1.24.0">
+    <PackageReference Include="LoupixDeck.PluginSdk" Version="1.28.0">
       <ExcludeAssets>runtime</ExcludeAssets>
     </PackageReference>
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="9.0.9" />
@@ -32,6 +32,7 @@
   <ItemGroup>
     <None Update="plugin.json" CopyToOutputDirectory="PreserveNewest" />
     <None Update="strings.*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\icon.png" Link="icon.png" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

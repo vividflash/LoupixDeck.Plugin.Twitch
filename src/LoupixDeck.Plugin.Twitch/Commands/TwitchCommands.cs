@@ -10,15 +10,14 @@ namespace LoupixDeck.Plugin.Twitch.Commands;
 /// short text is flashed on the touch slot next to it.
 ///
 /// <para>
-/// Touch and simple buttons never tell the plugin which one fired, so on top of that this base
-/// class implements <see cref="IDisplayImageCommand"/> and draws the same short result text as a
-/// small badge over the bottom of the button's own image (a rounded, semi-transparent dark band,
+/// On top of that this base class implements <see cref="IDisplayImageCommand"/> and draws the
+/// same short result text as a small badge over the bottom of the button's own image (a rounded, semi-transparent dark band,
 /// white bold centered text), for a few seconds after every press. By default the badge shows
 /// exactly the text flashed on a dial (<see cref="OnSuccess"/>/<see cref="OnFailure"/> both call
 /// <see cref="SetBadge(CommandContext,string,TimeSpan?)"/>); a command can override either hook
 /// for different on-button behaviour, e.g. a countdown (see <c>RunCommercialCommand</c>). State is
-/// keyed by the button's own parsed parameters, not by command name alone, so e.g. several
-/// SendChatMessage buttons with different fixed messages each keep their own badge.
+/// keyed by the host's per-button key (<see cref="CommandContext.ButtonKey"/>), so two buttons with
+/// the same command, or the same command on two pages, each keep their own badge.
 /// </para>
 /// </summary>
 internal abstract class TwitchCommandBase : IDisplayImageCommand
@@ -197,11 +196,11 @@ internal abstract class TwitchCommandBase : IDisplayImageCommand
         return true;
     }
 
-    /// <summary>Keys badge state per button rather than per command: several buttons bound to the
-    /// same command name but different parameters (e.g. two SendChatMessage buttons with
-    /// different fixed texts) each get their own badge. The render-path CommandContext carries
-    /// the same parsed Parameters as the execute-path one for the same button.</summary>
-    private static string KeyFor(CommandContext ctx) => string.Join('', ctx.Parameters);
+    /// <summary>Keys badge state per button: the host hands the same <see cref="CommandContext.ButtonKey"/>
+    /// to a press and to the render path of that button, and never to two buttons. It is null only
+    /// when no button is involved (dial, CLI), where nothing is drawn; the parameters then serve as
+    /// a stand-in key.</summary>
+    private static string KeyFor(CommandContext ctx) => ctx.ButtonKey ?? string.Join('', ctx.Parameters);
 
     private static void DrawBadge(IRenderCanvas canvas, string text)
     {
@@ -231,6 +230,8 @@ internal sealed class SendChatMessageCommand(HelixClient helix, IPluginLogger lo
         CommandName = "Twitch.SendChatMessage",
         DisplayName = "Send chat message",
         Group = GroupName,
+        Icon = TwitchButtonLayouts.SendMessage,
+        ButtonLayout = TwitchButtonLayouts.IconWithCaption(TwitchButtonLayouts.SendMessage, Localization.Tr("Message")),
         Description = "Sends a fixed message to your channel chat",
         ParameterTemplate = "({Message})",
         Parameters = [new CommandParameter("Message", typeof(string)) { DefaultValue = "" }]
@@ -261,6 +262,8 @@ internal sealed class CreateClipCommand(HelixClient helix, IPluginLogger logger,
         CommandName = "Twitch.CreateClip",
         DisplayName = "Create clip",
         Group = GroupName,
+        Icon = TwitchButtonLayouts.Clip,
+        ButtonLayout = TwitchButtonLayouts.IconWithCaption(TwitchButtonLayouts.Clip, Localization.Tr("Clip")),
         Description = "Clips your live stream (fails when offline)"
     };
 
@@ -279,6 +282,8 @@ internal sealed class ClearChatCommand(HelixClient helix, IPluginLogger logger, 
         CommandName = "Twitch.ClearChat",
         DisplayName = "Clear chat",
         Group = GroupName,
+        Icon = TwitchButtonLayouts.ClearChat,
+        ButtonLayout = TwitchButtonLayouts.IconWithCaption(TwitchButtonLayouts.ClearChat, Localization.Tr("Clear")),
         Description = "Removes all messages from your chat"
     };
 
@@ -301,6 +306,8 @@ internal sealed class ToggleSlowChatCommand(
         CommandName = "Twitch.ToggleSlowChat",
         DisplayName = "Toggle slow chat",
         Group = GroupName,
+        Icon = TwitchButtonLayouts.SlowChat,
+        ButtonLayout = TwitchButtonLayouts.IconWithCaption(TwitchButtonLayouts.SlowChat, Localization.Tr("Slow")),
         Description = "Turns slow mode on or off (wait time set in plugin settings)"
     };
 
@@ -319,6 +326,8 @@ internal sealed class ToggleEmotesOnlyCommand(HelixClient helix, IPluginLogger l
         CommandName = "Twitch.ToggleEmotesOnly",
         DisplayName = "Toggle emote-only chat",
         Group = GroupName,
+        Icon = TwitchButtonLayouts.EmotesOnly,
+        ButtonLayout = TwitchButtonLayouts.IconWithCaption(TwitchButtonLayouts.EmotesOnly, Localization.Tr("Emotes")),
         Description = "Turns emote-only mode on or off"
     };
 
@@ -354,6 +363,8 @@ internal sealed class RunCommercialCommand(
         CommandName = Name,
         DisplayName = "Run Ad",
         Group = GroupName,
+        Icon = TwitchButtonLayouts.Ad,
+        ButtonLayout = TwitchButtonLayouts.IconWithCaption(TwitchButtonLayouts.Ad, Localization.Tr("Ad")),
         Description = "Starts an ad break (length set in plugin settings)"
     };
 
@@ -399,7 +410,8 @@ internal sealed class CreateStreamMarkerCommand(HelixClient helix, IPluginLogger
         CommandName = "Twitch.CreateStreamMarker",
         DisplayName = "Set Marker",
         Group = GroupName,
-        Icon = "\U000F00C0", // mdi-bookmark
+        Icon = TwitchButtonLayouts.Marker,
+        ButtonLayout = TwitchButtonLayouts.IconWithCaption(TwitchButtonLayouts.Marker, Localization.Tr("Marker")),
         Description = "Marks the current moment of your live stream for highlights"
     };
 
@@ -420,6 +432,8 @@ internal sealed class ViewerCountCommand(ViewerCountCache cache, IPluginLogger l
         CommandName = Name,
         DisplayName = "Viewer count",
         Group = TwitchCommandBase.GroupName,
+        Icon = TwitchButtonLayouts.Viewers,
+        ButtonLayout = TwitchButtonLayouts.IconWithCount(TwitchButtonLayouts.Viewers),
         Description = "Shows your current viewer count (updates at most once a minute)"
     };
 

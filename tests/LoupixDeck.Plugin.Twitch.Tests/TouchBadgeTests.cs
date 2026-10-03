@@ -40,6 +40,22 @@ public class TouchBadgeTests
     }
 
     [Fact]
+    public async Task Badge_is_per_button_even_for_identical_command_and_parameters()
+    {
+        var rig = new Rig();
+        rig.Handler.Respond(HttpStatusCode.NotFound, """{"status":404,"message":"channel is offline"}""");
+        var cmd = new CreateClipCommand(rig.Helix, rig.Logger, () => rig.Now);
+        var host = new FakeHost();
+        var pressed = new CommandContext { Parameters = [], Target = ButtonTargets.TouchButton, Host = host, ButtonKey = "button-a" };
+        var other = new CommandContext { Parameters = [], Target = ButtonTargets.TouchButton, Host = host, ButtonKey = "button-b" };
+
+        await cmd.Execute(pressed);
+
+        Assert.True(cmd.RenderImage(pressed, new FakeCanvas()));
+        Assert.False(cmd.RenderImage(other, new FakeCanvas())); // same command, other button: untouched
+    }
+
+    [Fact]
     public async Task CreateStreamMarker_offline_shows_badge()
     {
         var rig = new Rig();
