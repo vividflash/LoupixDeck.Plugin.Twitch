@@ -1,6 +1,6 @@
 # LoupixDeck Twitch plugin
 
-Twitch plugin for [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck). Windows only.
+Twitch plugin for [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck) 1.37.0 or newer. Windows only.
 
 ## Commands
 
@@ -17,7 +17,7 @@ Twitch plugin for [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck). Windo
 
 A chat message cannot contain `)`. Commas are kept: `Twitch.SendChatMessage(hi,all)` sends `hi, all`.
 
-On a touch button each command shows its result for 10 seconds at the bottom of the button: `Sent`, `Clipped`, `Cleared`, `Slow ON`/`Slow OFF`, `Emotes ON`/`Emotes OFF`, `Marked`, `Offline`, `Sign in` or `Failed`. Run Ad counts down the ad seconds, or shows `Cooldown` when pressed too early.
+On a touch button each command shows its result for 10 seconds: `Sent`, `Clipped`, `Cleared`, `Slow ON`/`Slow OFF`, `Emotes ON`/`Emotes OFF`, `Marked`, `Offline`, `Sign in` or `Failed`. Run Ad counts down the ad, or shows `Cooldown` when pressed too early.
 
 ## Setup
 
@@ -30,11 +30,11 @@ Settings:
 - **Redirect port**: default `3000`. If you change it, change the redirect URL of your Twitch application too.
 - **Slow mode wait**: 3, 5, 10, 20, 30, 60 or 120 seconds, default 30.
 - **Ad length**: 30, 60, 90, 120, 150 or 180 seconds, default 30.
-- **Post clip link in chat**: off by default. When on, `Twitch.CreateClip` sends the link to the new clip to your chat.
-- **Marker chat message**: empty by default. A text entered here is sent to your chat after `Twitch.CreateStreamMarker`.
+- **Post clip link in chat**: off by default. When on, `Twitch.CreateClip` sends the clip link to your chat.
+- **Marker chat message**: empty by default. The text is sent to your chat after `Twitch.CreateStreamMarker`.
 
-For slow mode wait and ad length, other numbers are rounded to the nearest allowed value.
+Other numbers for slow mode wait and ad length are rounded to the nearest allowed value.
 
 ## Storage
 
-Client ID, Client Secret and the sign-in token are stored in the plugin's `settings.json`. The token is encrypted with Windows DPAPI, so only your Windows account on this PC can use it. **Sign out** revokes it at Twitch and deletes it.
+Client ID, Client Secret and the sign-in token are stored in the plugin's `settings.json`. The token is encrypted with Windows DPAPI: only your Windows account on this PC can use it. **Sign out** revokes it at Twitch and deletes it.
