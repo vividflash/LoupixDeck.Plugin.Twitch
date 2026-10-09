@@ -30,8 +30,10 @@ Settings:
 - **Redirect port**: default `3000`. If you change it, change the redirect URL of your Twitch application too.
 - **Slow mode wait**: 3, 5, 10, 20, 30, 60 or 120 seconds, default 30.
 - **Ad length**: 30, 60, 90, 120, 150 or 180 seconds, default 30.
+- **Post clip link in chat**: off by default. When on, `Twitch.CreateClip` sends the link to the new clip to your chat.
+- **Marker chat message**: empty by default. A text entered here is sent to your chat after `Twitch.CreateStreamMarker`.
 
-Other numbers are rounded to the nearest allowed value.
+For slow mode wait and ad length, other numbers are rounded to the nearest allowed value.
 
 ## Storage
 

@@ -1,7 +1,6 @@
 bin/
 obj/
 dist/
-local-feed/
 TestResults/
 .vs/
 *.user

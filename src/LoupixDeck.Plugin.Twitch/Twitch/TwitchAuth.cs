@@ -177,8 +177,10 @@ public sealed class TwitchAuth
 
                 if (!string.Equals(query.Get("state"), state, StringComparison.Ordinal))
                 {
+                    // Not our redirect (stale tab, some other local request): refuse it and keep
+                    // waiting, so it cannot abort the real sign-in. The timeout still ends the wait.
                     await WriteResponse(context, 400, "Sign-in state mismatch. Start again from LoupixDeck.").ConfigureAwait(false);
-                    throw new InvalidOperationException("Sign-in state mismatch (stale browser tab?). Try again.");
+                    continue;
                 }
 
                 if (error != null)
@@ -250,10 +252,12 @@ public sealed class TwitchAuth
                 throw new TwitchAuthRequiredException("Twitch session expired, sign in again.");
             }
 
+            // The grant belongs to the app it was issued to, not to whatever the
+            // Client ID setting holds now; only the secret has to come from the settings.
             var creds = _credentials();
             using var content = new FormUrlEncodedContent(new Dictionary<string, string>
             {
-                ["client_id"] = creds.ClientId.Trim(),
+                ["client_id"] = current.ClientId.Length > 0 ? current.ClientId : creds.ClientId.Trim(),
                 ["client_secret"] = creds.ClientSecret.Trim(),
                 ["grant_type"] = "refresh_token",
                 ["refresh_token"] = current.RefreshToken
@@ -264,7 +268,15 @@ public sealed class TwitchAuth
 
             if (resp.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
             {
-                _logger.Warn($"Twitch: token refresh rejected ({(int)resp.StatusCode}): {HelixClient.ErrorMessage(body)}");
+                var reason = HelixClient.ErrorMessage(body);
+                _logger.Warn($"Twitch: token refresh rejected ({(int)resp.StatusCode}): {reason}");
+
+                // "invalid client" / "invalid client secret": the settings are wrong, the grant
+                // itself may still be good, so keep it for when the settings are fixed.
+                if (reason.Contains("client", StringComparison.OrdinalIgnoreCase))
+                    throw new TwitchAuthRequiredException(
+                        "Twitch rejected the Client ID or Client Secret. Check them in the plugin settings.");
+
                 _store.Clear();
                 throw new TwitchAuthRequiredException("Twitch session expired, sign in again.");
             }

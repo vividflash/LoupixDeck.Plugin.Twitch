@@ -18,6 +18,8 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     internal const string SettingRedirectPort = "redirect_port";
     internal const string SettingSlowWait = "slow_mode_wait_seconds";
     internal const string SettingAdLength = "ad_length_seconds";
+    internal const string SettingClipLinkInChat = "clip_link_in_chat";
+    internal const string SettingMarkerChatMessage = "marker_chat_message";
     internal const int DefaultRedirectPort = 3000;
     internal const int DefaultSlowWait = TwitchSteps.DefaultSlowModeWait;
     internal const int DefaultAdLength = TwitchSteps.DefaultAdLength;
@@ -29,12 +31,13 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     private HelixClient _helix = null!;
     private ViewerCountCache _viewers = null!;
     private List<IPluginCommand> _commands = [];
+    private readonly CancellationTokenSource _shutdown = new();
 
     public override PluginMetadata Metadata { get; } = new()
     {
         Id = "twitch",
         Name = "Twitch",
-        Version = new Version(1, 4, 0),
+        Version = new Version(1, 5, 0),
         SdkVersion = new Version(1, 28, 0),
         Author = "vividflash",
         Description = "Send chat messages, create clips, run ads, set stream markers, clear chat, toggle slow and emote-only mode, and show the live viewer count."
@@ -58,13 +61,13 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         _commands =
         [
             new SendChatMessageCommand(_helix, host.Logger),
-            new CreateClipCommand(_helix, host.Logger),
+            new CreateClipCommand(_helix, host.Logger, postLinkInChat: ReadClipLinkInChat),
             new ViewerCountCommand(_viewers, host.Logger),
             new ClearChatCommand(_helix, host.Logger),
             new ToggleSlowChatCommand(_helix, host.Logger, ReadSlowWait),
             new ToggleEmotesOnlyCommand(_helix, host.Logger),
             new RunCommercialCommand(_helix, host.Logger, ReadAdLength),
-            new CreateStreamMarkerCommand(_helix, host.Logger)
+            new CreateStreamMarkerCommand(_helix, host.Logger, chatMessage: ReadMarkerChatMessage)
         ];
     }
 
@@ -82,6 +85,8 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
 
     public override void Shutdown()
     {
+        // Ends a sign-in that is still waiting, so its listener frees the redirect port.
+        try { _shutdown.Cancel(); } catch { /* shutting down */ }
         try { _http?.Dispose(); } catch { /* shutting down */ }
     }
 
@@ -102,6 +107,15 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
 
     private int ReadAdLength() =>
         TwitchSteps.SnapAdLength(_host.Settings.Get<long>(SettingAdLength, DefaultAdLength));
+
+    private bool ReadClipLinkInChat() => ReadFlag(_host.Settings, SettingClipLinkInChat);
+
+    private string ReadMarkerChatMessage() => _host.Settings.Get<string>(SettingMarkerChatMessage) ?? string.Empty;
+
+    /// <summary>Reads a toggle setting whether the host stored it as a bool or as text.</summary>
+    internal static bool ReadFlag(IPluginSettings settings, string key) =>
+        settings.Get<bool>(key) ||
+        string.Equals(settings.Get<string>(key), "true", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Stores pasted credentials without stray whitespace/quotes, so the saved
@@ -192,6 +206,22 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
                 },
                 new PluginSettingDescriptor
                 {
+                    Key = SettingClipLinkInChat,
+                    Label = "Post clip link in chat",
+                    Kind = PluginSettingKind.Toggle,
+                    Description = Localization.Tr("After 'Create clip' the link to the new clip is sent to your chat."),
+                    DefaultValue = false
+                },
+                new PluginSettingDescriptor
+                {
+                    Key = SettingMarkerChatMessage,
+                    Label = "Marker chat message",
+                    Kind = PluginSettingKind.Text,
+                    Description = Localization.Tr("Sent to your chat after 'Set Marker'. Leave empty to send nothing."),
+                    DefaultValue = string.Empty
+                },
+                new PluginSettingDescriptor
+                {
                     Key = "__heading_ads",
                     Label = "Ads",
                     Kind = PluginSettingKind.Heading,
@@ -253,7 +283,7 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         {
             try
             {
-                var result = await _auth.SignInAsync(ReadPort(), url => _host.OpenBrowser(url));
+                var result = await _auth.SignInAsync(ReadPort(), url => _host.OpenBrowser(url), _shutdown.Token);
                 _host.Logger.Info($"Twitch: {result}");
                 return result;
             }

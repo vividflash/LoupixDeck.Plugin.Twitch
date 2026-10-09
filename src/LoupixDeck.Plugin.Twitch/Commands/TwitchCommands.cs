@@ -101,6 +101,20 @@ internal abstract class TwitchCommandBase : IDisplayImageCommand
     /// <summary>Runs the command; returns an optional short success text for dial feedback.</summary>
     protected abstract Task<string?> Run(CommandContext ctx);
 
+    /// <summary>Posts an optional chat line after the command's own action succeeded. A failure
+    /// here is logged and does not change the command's result.</summary>
+    protected async Task AnnounceInChat(string message)
+    {
+        try
+        {
+            await Helix.SendChatMessageAsync(message).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            Logger.Warn($"Twitch: {Descriptor.DisplayName} worked, but its chat message was not sent: {ex.Message}");
+        }
+    }
+
     private static void Feedback(CommandContext ctx, string text)
     {
         try
@@ -254,9 +268,15 @@ internal sealed class SendChatMessageCommand(HelixClient helix, IPluginLogger lo
     }
 }
 
-internal sealed class CreateClipCommand(HelixClient helix, IPluginLogger logger, Func<DateTime>? utcNow = null)
+internal sealed class CreateClipCommand(
+    HelixClient helix,
+    IPluginLogger logger,
+    Func<DateTime>? utcNow = null,
+    Func<bool>? postLinkInChat = null)
     : TwitchCommandBase(helix, logger, utcNow)
 {
+    internal const string ClipUrlPrefix = "https://clips.twitch.tv/";
+
     public override CommandDescriptor Descriptor { get; } = new()
     {
         CommandName = "Twitch.CreateClip",
@@ -269,7 +289,9 @@ internal sealed class CreateClipCommand(HelixClient helix, IPluginLogger logger,
 
     protected override async Task<string?> Run(CommandContext ctx)
     {
-        await Helix.CreateClipAsync().ConfigureAwait(false);
+        var clipId = await Helix.CreateClipAsync().ConfigureAwait(false);
+        if (clipId.Length > 0 && postLinkInChat?.Invoke() == true)
+            await AnnounceInChat(ClipUrlPrefix + clipId).ConfigureAwait(false);
         return "Clipped";
     }
 }
@@ -402,7 +424,11 @@ internal sealed class RunCommercialCommand(
 }
 
 /// <summary>Adds a stream marker at the current position (live only). No description.</summary>
-internal sealed class CreateStreamMarkerCommand(HelixClient helix, IPluginLogger logger, Func<DateTime>? utcNow = null)
+internal sealed class CreateStreamMarkerCommand(
+    HelixClient helix,
+    IPluginLogger logger,
+    Func<DateTime>? utcNow = null,
+    Func<string>? chatMessage = null)
     : TwitchCommandBase(helix, logger, utcNow)
 {
     public override CommandDescriptor Descriptor { get; } = new()
@@ -418,6 +444,9 @@ internal sealed class CreateStreamMarkerCommand(HelixClient helix, IPluginLogger
     protected override async Task<string?> Run(CommandContext ctx)
     {
         await Helix.CreateStreamMarkerAsync().ConfigureAwait(false);
+        var message = chatMessage?.Invoke()?.Trim();
+        if (!string.IsNullOrEmpty(message))
+            await AnnounceInChat(message).ConfigureAwait(false);
         return "Marked";
     }
 }
