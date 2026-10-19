@@ -68,10 +68,14 @@ public sealed class TwitchAuth
     /// Sanity check of the entered app credentials. Returns a user-facing problem
     /// description, or null when both look like real Twitch values.
     /// </summary>
-    public static string? ValidateCredentials(AppCredentials creds)
+    public static string? ValidateCredentials(AppCredentials creds) =>
+        ValidateCleanCredentials(new AppCredentials(CleanCredential(creds.ClientId), CleanCredential(creds.ClientSecret)));
+
+    /// <summary><see cref="ValidateCredentials"/> for values already passed through <see cref="CleanCredential"/>.</summary>
+    internal static string? ValidateCleanCredentials(AppCredentials creds)
     {
-        var id = CleanCredential(creds.ClientId);
-        var secret = CleanCredential(creds.ClientSecret);
+        var id = creds.ClientId;
+        var secret = creds.ClientSecret;
         if (id.Length == 0) return Localization.Tr("Client ID is empty.");
         if (secret.Length == 0) return Localization.Tr("Client Secret is empty.");
         return CheckOne("Client ID", id) ?? CheckOne("Client Secret", secret);
@@ -122,8 +126,8 @@ public sealed class TwitchAuth
     public async Task<string> SignInAsync(int port, Func<string, bool> openBrowser, CancellationToken ct = default)
     {
         var raw = _credentials();
-        if (ValidateCredentials(raw) is { } problem) throw new InvalidOperationException(problem);
         var creds = new AppCredentials(CleanCredential(raw.ClientId), CleanCredential(raw.ClientSecret));
+        if (ValidateCleanCredentials(creds) is { } problem) throw new InvalidOperationException(problem);
         if (port is <= 0 or > 65535)
             throw new InvalidOperationException(string.Format(Localization.Tr("Redirect port {0} is not a valid port."), port));
 

@@ -232,31 +232,22 @@ public sealed class HelixClient
     }
 
     /// <summary>Flips slow mode (GET then PATCH). Returns the new state.</summary>
-    public async Task<bool> ToggleSlowModeAsync(int defaultWaitSeconds, CancellationToken ct = default)
-    {
-        await _chatSettingsLock.WaitAsync(ct).ConfigureAwait(false);
-        try
-        {
-            var current = await GetChatSettingsAsync(ct).ConfigureAwait(false);
-            var patch = BuildSlowModePatch(current, defaultWaitSeconds);
-            await PatchChatSettingsAsync(patch, ct).ConfigureAwait(false);
-            return !current.SlowMode;
-        }
-        finally
-        {
-            _chatSettingsLock.Release();
-        }
-    }
+    public Task<bool> ToggleSlowModeAsync(int defaultWaitSeconds, CancellationToken ct = default) =>
+        ToggleChatSettingAsync(s => BuildSlowModePatch(s, defaultWaitSeconds), s => s.SlowMode, ct);
 
     /// <summary>Flips emote-only mode (GET then PATCH). Returns the new state.</summary>
-    public async Task<bool> ToggleEmoteOnlyAsync(CancellationToken ct = default)
+    public Task<bool> ToggleEmoteOnlyAsync(CancellationToken ct = default) =>
+        ToggleChatSettingAsync(BuildEmoteModePatch, s => s.EmoteMode, ct);
+
+    private async Task<bool> ToggleChatSettingAsync(
+        Func<ChatSettings, JsonObject> buildPatch, Func<ChatSettings, bool> isOn, CancellationToken ct)
     {
         await _chatSettingsLock.WaitAsync(ct).ConfigureAwait(false);
         try
         {
             var current = await GetChatSettingsAsync(ct).ConfigureAwait(false);
-            await PatchChatSettingsAsync(BuildEmoteModePatch(current), ct).ConfigureAwait(false);
-            return !current.EmoteMode;
+            await PatchChatSettingsAsync(buildPatch(current), ct).ConfigureAwait(false);
+            return !isOn(current);
         }
         finally
         {

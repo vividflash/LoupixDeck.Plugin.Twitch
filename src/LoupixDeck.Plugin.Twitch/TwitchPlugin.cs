@@ -102,11 +102,12 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         return port is > 0 and <= 65535 ? (int)port : DefaultRedirectPort;
     }
 
+    // HelixClient snaps both to Twitch's steps.
     private int ReadSlowWait() =>
-        TwitchSteps.SnapSlowModeWait(_host.Settings.Get<long>(SettingSlowWait, DefaultSlowWait));
+        (int)Math.Clamp(_host.Settings.Get<long>(SettingSlowWait, DefaultSlowWait), 0, int.MaxValue);
 
     private int ReadAdLength() =>
-        TwitchSteps.SnapAdLength(_host.Settings.Get<long>(SettingAdLength, DefaultAdLength));
+        (int)Math.Clamp(_host.Settings.Get<long>(SettingAdLength, DefaultAdLength), 0, int.MaxValue);
 
     private bool ReadClipLinkInChat() => ReadFlag(_host.Settings, SettingClipLinkInChat);
 
@@ -146,7 +147,7 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
             var signedInAs = _tokens?.Load() is { } t ? (t.Login.Length > 0 ? t.Login : "your account") : null;
             var creds = _host == null ? new AppCredentials("", "") : ReadCredentials();
             var credsEntered = creds.ClientId.Length > 0 || creds.ClientSecret.Length > 0;
-            var credsProblem = credsEntered ? TwitchAuth.ValidateCredentials(creds) : null;
+            var credsProblem = credsEntered ? TwitchAuth.ValidateCleanCredentials(creds) : null;
             var missingScopes = _tokens?.Load() is { Scopes.Length: > 0 } granted
                 ? TwitchAuth.RequiredScopes.Where(s => !granted.Scopes.Contains(s)).ToArray()
                 : [];

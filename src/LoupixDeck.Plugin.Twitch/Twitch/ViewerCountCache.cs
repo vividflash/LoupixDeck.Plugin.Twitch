@@ -63,14 +63,16 @@ public sealed class ViewerCountCache
     /// <summary>Forget the throttle and any sign-in block (after sign-in/out or settings change).</summary>
     public void Invalidate()
     {
+        bool changed;
         lock (_gate)
         {
             _authBlocked = false;
             _lastFetchStartUtc = DateTime.MinValue;
+            changed = _text != "…";
             _text = "…";
         }
 
-        SafeNotify();
+        if (changed) SafeNotify();
     }
 
     internal static string Format(int? viewers) => viewers is { } n ? n.ToString("N0", System.Globalization.CultureInfo.InvariantCulture) : "offline";

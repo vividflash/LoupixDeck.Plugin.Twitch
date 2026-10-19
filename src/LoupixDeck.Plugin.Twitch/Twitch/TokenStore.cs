@@ -67,6 +67,7 @@ public sealed class TokenStore
     private readonly ITokenProtector _protector;
     private readonly IPluginLogger? _logger;
     private readonly object _gate = new();
+    private readonly object _persistGate = new();
     private TokenData? _cached;
     private bool _loaded;
 
@@ -109,21 +110,35 @@ public sealed class TokenStore
     {
         lock (_gate)
         {
-            _settings.Set(SettingsKey, _protector.Protect(JsonSerializer.Serialize(data)));
-            _settings.Save();
             _cached = data;
             _loaded = true;
         }
+        Persist();
     }
 
     public void Clear()
     {
         lock (_gate)
         {
-            _settings.Remove(SettingsKey);
-            _settings.Save();
             _cached = null;
             _loaded = true;
+        }
+        Persist();
+    }
+
+    // Writes the newest cached state, so Load never waits for encryption or the settings file.
+    private void Persist()
+    {
+        lock (_persistGate)
+        {
+            TokenData? current;
+            lock (_gate) current = _cached;
+
+            if (current == null)
+                _settings.Remove(SettingsKey);
+            else
+                _settings.Set(SettingsKey, _protector.Protect(JsonSerializer.Serialize(current)));
+            _settings.Save();
         }
     }
 }
