@@ -37,7 +37,7 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     {
         Id = "twitch",
         Name = "Twitch",
-        Version = new Version(1, 5, 0),
+        Version = new Version(1, 5, 1),
         SdkVersion = new Version(1, 28, 0),
         Author = "vividflash",
         Description = "Send chat messages, create clips, run ads, set stream markers, clear chat, toggle slow and emote-only mode, and show the live viewer count."
@@ -48,7 +48,7 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         _host = host;
         Localization.SetHost(host);
         _http = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        _http.DefaultRequestHeaders.UserAgent.ParseAdd("LoupixDeck.Plugin.Twitch/1.1");
+        _http.DefaultRequestHeaders.UserAgent.ParseAdd($"LoupixDeck.Plugin.Twitch/{Metadata.Version.ToString(3)}");
 
         _tokens = new TokenStore(host.Settings, new DpapiTokenProtector(), host.Logger);
         _auth = new TwitchAuth(_http, _tokens, ReadCredentials, host.Logger);
@@ -309,9 +309,20 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
         Label = "Sign out",
         Invoke = async () =>
         {
-            await _auth.SignOutAsync();
-            _viewers.Invalidate();
-            return Localization.Tr("Signed out, token deleted.");
+            try
+            {
+                await _auth.SignOutAsync();
+                return Localization.Tr("Signed out, token deleted.");
+            }
+            catch (Exception ex)
+            {
+                _host.Logger.Error("Twitch sign-out failed", ex);
+                throw new InvalidOperationException(ex.Message, ex);
+            }
+            finally
+            {
+                _viewers.Invalidate();
+            }
         }
     };
 }

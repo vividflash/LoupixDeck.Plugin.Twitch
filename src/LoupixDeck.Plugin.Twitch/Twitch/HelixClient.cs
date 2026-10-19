@@ -35,6 +35,9 @@ public sealed class HelixClient
     // so remember it to make a later "cooldown" error say how long is left.
     private DateTime? _adCooldownUntilUtc;
 
+    // Toggles are GET then PATCH; two presses in one round trip would both read the old state.
+    private readonly SemaphoreSlim _chatSettingsLock = new(1, 1);
+
     /// <summary>
     /// UTC time the ad cooldown started by this client's own last successful ad ends, or null
     /// when unknown (no ad started yet this session). Used by the Run Ad button badge to show a
@@ -231,18 +234,34 @@ public sealed class HelixClient
     /// <summary>Flips slow mode (GET then PATCH). Returns the new state.</summary>
     public async Task<bool> ToggleSlowModeAsync(int defaultWaitSeconds, CancellationToken ct = default)
     {
-        var current = await GetChatSettingsAsync(ct).ConfigureAwait(false);
-        var patch = BuildSlowModePatch(current, defaultWaitSeconds);
-        await PatchChatSettingsAsync(patch, ct).ConfigureAwait(false);
-        return !current.SlowMode;
+        await _chatSettingsLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var current = await GetChatSettingsAsync(ct).ConfigureAwait(false);
+            var patch = BuildSlowModePatch(current, defaultWaitSeconds);
+            await PatchChatSettingsAsync(patch, ct).ConfigureAwait(false);
+            return !current.SlowMode;
+        }
+        finally
+        {
+            _chatSettingsLock.Release();
+        }
     }
 
     /// <summary>Flips emote-only mode (GET then PATCH). Returns the new state.</summary>
     public async Task<bool> ToggleEmoteOnlyAsync(CancellationToken ct = default)
     {
-        var current = await GetChatSettingsAsync(ct).ConfigureAwait(false);
-        await PatchChatSettingsAsync(BuildEmoteModePatch(current), ct).ConfigureAwait(false);
-        return !current.EmoteMode;
+        await _chatSettingsLock.WaitAsync(ct).ConfigureAwait(false);
+        try
+        {
+            var current = await GetChatSettingsAsync(ct).ConfigureAwait(false);
+            await PatchChatSettingsAsync(BuildEmoteModePatch(current), ct).ConfigureAwait(false);
+            return !current.EmoteMode;
+        }
+        finally
+        {
+            _chatSettingsLock.Release();
+        }
     }
 
     private async Task PatchChatSettingsAsync(JsonObject patch, CancellationToken ct)
