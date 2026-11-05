@@ -1,6 +1,6 @@
 # LoupixDeck Twitch plugin
 
-Twitch plugin for [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck) 1.37.0 or newer. Windows only.
+Control your Twitch chat and stream from [LoupixDeck](https://github.com/RadiatorTwo/LoupixDeck) 1.37.0 or newer. Windows only.
 
 ## Commands
 
