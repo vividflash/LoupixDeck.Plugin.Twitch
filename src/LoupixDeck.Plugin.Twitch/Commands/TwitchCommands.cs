@@ -451,8 +451,15 @@ internal sealed class CreateStreamMarkerCommand(
     }
 }
 
-/// <summary>Live text display: viewer count, "offline" when not live.</summary>
-internal sealed class ViewerCountCommand(ViewerCountCache cache, IPluginLogger logger) : IDisplayCommand
+/// <summary>
+/// Live viewer count, "offline" when not live. The count is reported as a value
+/// (<see cref="IValueDisplayCommand"/>), which the host draws on the button's value text layer, so
+/// the user can move and restyle it. <see cref="IDisplayCommand"/> stays for buttons placed before
+/// 1.6.0: their count layer is a plain text layer that only the text path updates. On a button
+/// placed with the current layout the text path writes into the value layer, which draws the
+/// value instead, so the count shows once either way.
+/// </summary>
+internal sealed class ViewerCountCommand(ViewerCountCache cache, IPluginLogger logger) : IDisplayCommand, IValueDisplayCommand
 {
     public const string Name = "Twitch.ViewerCount";
 
@@ -468,8 +475,11 @@ internal sealed class ViewerCountCommand(ViewerCountCache cache, IPluginLogger l
 
     public ButtonTargets SupportedTargets => ButtonTargets.TouchButton;
 
-    // Cheap: GetText only reads the cache; the cache itself throttles network calls.
-    public TimeSpan UpdateInterval => TimeSpan.FromSeconds(5);
+    // Cheap: GetText/GetValue only read the cache; the cache itself throttles network calls and
+    // asks the host to redraw as soon as a fetch changes the text, so the poll only has to start
+    // the next fetch. The host polls once right away when the page shows; 30 s keeps the count at
+    // most about 90 s old (fetches stay at most once a minute).
+    public TimeSpan UpdateInterval => TimeSpan.FromSeconds(30);
 
     public string GetText(CommandContext ctx)
     {
@@ -493,6 +503,9 @@ internal sealed class ViewerCountCommand(ViewerCountCache cache, IPluginLogger l
             return Localization.Tr("error");
         }
     }
+
+    /// <summary>The same text as <see cref="GetText"/>, without an arc (a viewer count has no range).</summary>
+    public AdjustmentValue? GetValue(CommandContext ctx) => new(double.NaN, GetText(ctx));
 
     // Pressing the button does nothing on purpose: the count refreshes on its own at
     // most once a minute while visible, and a press must not bypass that limit.

@@ -37,8 +37,8 @@ public sealed class TwitchPlugin : LoupixPlugin, IPluginSettingsPage
     {
         Id = "twitch",
         Name = "Twitch",
-        Version = new Version(1, 5, 1),
-        SdkVersion = new Version(1, 28, 0),
+        Version = new Version(1, 6, 0),
+        SdkVersion = new Version(1, 30, 0),
         Author = "vividflash",
         Description = "Send chat messages, create clips, run ads, set stream markers, clear chat, toggle slow and emote-only mode, and show the live viewer count."
     };

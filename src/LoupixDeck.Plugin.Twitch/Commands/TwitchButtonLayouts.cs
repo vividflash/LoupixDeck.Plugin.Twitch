@@ -10,8 +10,8 @@ namespace LoupixDeck.Plugin.Twitch.Commands;
 /// <para>
 /// Icon and caption are centred on the key like the host's own plugins do it. The press commands'
 /// result badge (bottom 26 px band, see <see cref="TwitchCommandBase"/>) covers the caption while
-/// it shows. The viewer-count button has no badge: the host hands its count to the first text
-/// layer on the button (the command owns it from then on), so that layer is the number itself.
+/// it shows. The viewer-count button has no badge: its text layer shows the value the command
+/// reports (<see cref="ButtonTextSource.Value"/>), so that layer is the number itself.
 /// Captions are translated by the caller; the host would otherwise fill in the untranslated
 /// display name.
 /// </para>
@@ -71,8 +71,8 @@ internal static class TwitchButtonLayouts
         ]
     };
 
-    /// <summary>Icon above the live number. The text layer's placeholder is replaced by the count
-    /// on the first refresh.</summary>
+    /// <summary>Icon above the live number. The text layer draws the command's reported value; it is
+    /// empty until the first one arrives.</summary>
     public static ButtonLayoutDescriptor IconWithCount(string glyph) => new()
     {
         Mode = ButtonLayoutMode.Custom,
@@ -90,6 +90,7 @@ internal static class TwitchButtonLayouts
             {
                 Kind = ButtonLayerKind.Text,
                 Text = "-",
+                TextSource = ButtonTextSource.Value,
                 TextSize = CountTextSize,
                 OffsetY = CountTextOffsetY,
                 BoxWidth = CountBoxWidth,
